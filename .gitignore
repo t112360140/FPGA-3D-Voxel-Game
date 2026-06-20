@@ -2,7 +2,10 @@
 /incremental_db/
 /output_files/
 /simulation/
-/greybox_tmp/
+*/greybox_tmp/
+*/obj/
+*/mem_init/
+
 
 *.rpt
 *.chg
