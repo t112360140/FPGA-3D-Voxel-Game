@@ -1,0 +1,204 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>FPGA MC</title>
+
+        <style>
+            #VGA {
+                min-height: 90%;
+                image-rendering: pixelated;
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%,-50%);
+            }
+            .tools {
+                width: 120px;
+            }
+            input {
+                width: 100px;
+            }
+            textarea {
+                width: 100px;
+                resize: none;
+            }
+            button {
+                width: 100px;
+            }
+        </style>
+
+        <script src="./js/lib.js"></script>
+    </head>
+    <body>
+        <canvas id="VGA" height="480" width="640"></canvas>
+
+        <div class="tools">
+            <span>Tools</span>
+            <br><br>
+            <span>Float->Q16.16</span>
+            <br>
+            <input oninput="
+                {const inp=eval(this.value);
+                if(isFinite(inp))
+                    document.getElementById('q1616-result').value='0x'+toFixed(inp).toString(16);}
+            ">
+            <br>
+            <textarea id="q1616-result" rows="1" readonly></textarea>
+            <br><br>
+            <span>Q16.16->Float</span>
+            <br>
+            <input oninput="
+                {const inp=eval(this.value);
+                if(isFinite(inp))
+                    document.getElementById('float-result').value=getFloat(inp).toFixed(5);}
+            ">
+            <br>
+            <textarea id="float-result" rows="1" readonly></textarea>
+            <br><br>
+            <button onclick="
+                {
+                    let cos_table=COS_TABLE.map((v)=>('0x'+v.toString(16).padStart(4, '0')));
+                    cos_table[0]='0x0000';
+                    let str=`static const uint16_t COS_TABLE[${COS_TABLE.length}]={\n\t`;
+                    for(let i=0;i<cos_table.length;i++){
+                        str+=cos_table[i]+', ';
+                        if((i+1)%20==0) str+='\n\t';
+                    }
+                    str+='\n};';
+                    const blob=new Blob([str]);
+                    const a=document.createElement('a');
+                    a.download='COS_TABLE.h';
+                    a.href=window.URL.createObjectURL(blob);
+                    a.click();
+                }
+            ">Download COS_TABLE</button>
+            <br>
+            <button onclick="downloadQuartusHex(new Uint8Array(new Uint16Array(COS_TABLE).buffer), 16, 'COS_TABLE.hex')">Download COS_TABLE (ROM)</button>
+            <br>
+            <button onclick="downloadQuartusHex(getFlattenedBlockInfo(), 8, 'BLOCK_INFO.hex')">Download Block Info</button>
+            <br>
+            <button onclick="downloadQuartusHex(new Uint8Array(TEX), 8, 'TEXTURE.hex')">Download Texture</button>
+            <br>
+            <button onclick="downloadQuartusHex(new Uint8Array(INVDELTA_ROM.buffer), 32, 'INV_DELTA.hex')">Download INV_DELTA</button>
+            <br>
+            <button onclick="downloadQuartusHex(new Uint8Array([].concat(...Minecraft_Font)), 64, 'FONT.hex')">Download Font</button>
+
+            <script>
+            // 輔助函式：攤平 BLOCK_INFO 陣列
+            function getFlattenedBlockInfo() {
+                let block_info = [];
+                for(let i = 0; BLOCK_INFO[i]; i++){
+                    block_info = block_info.concat(BLOCK_INFO[i]);
+                }
+                return new Uint8Array(block_info);
+            }
+
+            /**
+             * 專為 Quartus 13.1 設計的相容型 Intel HEX 生成器
+             * @param {Uint8Array} bytesArray - 原始位元組陣列
+             * @param {number} dataWidthBits - ROM 的資料位元寬度 (8 或 32)
+             * @param {string} filename - 下載檔名
+             */
+            function downloadQuartusHex(bytesArray, dataWidthBits, filename) {
+                const bytesPerWord = dataWidthBits / 8; // 8-bit = 1 byte, 32-bit = 4 bytes
+                const currentWords = Math.ceil(bytesArray.byteLength / bytesPerWord);
+                
+                // 自動計算最接近的 2 的冪次方字數 (Word Depth)
+                let targetWords = 1;
+                while (targetWords < currentWords) {
+                    targetWords *= 2;
+                }
+                if (targetWords < 16) targetWords = 16; 
+
+                const totalRequiredBytes = targetWords * bytesPerWord;
+
+                // 建立完美對齊的補零陣列
+                let alignedBytes = new Uint8Array(totalRequiredBytes);
+                for (let i = 0; i < totalRequiredBytes; i++) {
+                    alignedBytes[i] = (i < bytesArray.byteLength) ? bytesArray[i] : 0;
+                }
+
+                let hexContent = "";
+                let wordAddress = 0; // 💡 關鍵修正：配合 Quartus 13.1，32-bit ROM 必須嚴格使用 Word 位址 (0, 1, 2, 3...)
+
+                for (let i = 0; i < alignedBytes.length; i += bytesPerWord) {
+                    let chunk = alignedBytes.slice(i, i + bytesPerWord);
+                    if (chunk.length === 0) break;
+
+                    let line = ":";
+                    let lenByte = chunk.length; // 這一行的位元組數 (8-bit為1, 32-bit為4)
+                    
+                    // 1. 寫入長度
+                    line += lenByte.toString(16).toUpperCase().padStart(2, '0');
+                    
+                    // 2. 寫入地址 (使用 Word 位址，每次 +1)
+                    line += wordAddress.toString(16).toUpperCase().padStart(4, '0');
+                    
+                    // 3. 紀錄類型 (00: Data)
+                    line += "00"; 
+                    
+                    // 4. 端序校正：將瀏覽器記憶體的 Little-Endian 反轉成符合 Quartus 期待的 Big-Endian 字串
+                    let displayChunk = Array.from(chunk);
+                    if (dataWidthBits === 16 || dataWidthBits === 32) {
+                        displayChunk.reverse(); // [00, 00, 01, 00] -> [00, 01, 00, 00]
+                    }
+
+                    // 5. 寫入資料與計算校驗和
+                    let dataHex = "";
+                    let checksumSum = lenByte + ((wordAddress >> 8) & 0xFF) + (wordAddress & 0xFF) + 0x00;
+                    
+                    for (let b = 0; b < displayChunk.length; b++) {
+                        let byteVal = displayChunk[b];
+                        dataHex += byteVal.toString(16).toUpperCase().padStart(2, '0');
+                        checksumSum += byteVal;
+                    }
+                    line += dataHex;
+                    
+                    // 6. 計算並寫入 Checksum
+                    let checksum = (256 - (checksumSum % 256)) % 256;
+                    line += checksum.toString(16).toUpperCase().padStart(2, '0');
+                    
+                    hexContent += line + "\n";
+                    wordAddress++; // 💡 每個 Word 一行，地址精準累加 1
+                }
+
+                // 檔案結束標記
+                hexContent += ":00000001FF\n";
+
+                // 下載純文字檔案
+                const blob = new Blob([hexContent], { type: 'text/plain' });
+                const a = document.createElement('a');
+                a.download = filename;
+                a.href = window.URL.createObjectURL(blob);
+                a.click();
+                window.URL.revokeObjectURL(a.href);
+                
+                console.log(`[Quartus 13.1 HEX] 成功導出: ${filename} | 深度: ${targetWords} words`);
+                alert(`請確保 Qsys 中 ${filename.split('.')[0]} 的大小為: ${targetWords*dataWidthBits/8} Bytes`);
+            }
+            </script>
+
+            <br><br>
+            Save File:
+            <input type="file" onchange="
+                {
+                const file=this.files[0];
+                if(file && file.size===(WORLD_X*WORLD_Y*WORLD_Z)){
+                    const reader=new FileReader();
+                    reader.onload=()=>{
+                        map=new Uint16Array(reader.result);
+                        player.y=toFixed(WORLD_Y-5);
+                        this.value='';
+                    };
+                    reader.readAsArrayBuffer(file);
+                }else{
+                    this.value='';
+                }
+                }
+            ">
+        </div>
+
+        <script src="./js/main.js"></script>
+        <script src="./js/mouse.js"></script>
+    </body>
+</html>
