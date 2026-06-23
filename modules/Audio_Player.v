@@ -62,13 +62,13 @@ module Audio_Player (
     wire signed [15:0] next_wave = wave1 + wave2 + wave3 + wave4;
 
     reg signed [15:0] filtered_wave;
+    wire signed [17:0] filter_diff = $signed(next_wave) - $signed(filtered_wave);
     always @(posedge audio_sample_clk) begin
         if (!rst_n) begin
             filtered_wave <= 0;
         end else begin
-            // 簡單的一階低通濾波器： 舊值 + (新值 - 舊值) * 衰減係數
-            // >>> 2 代表切斷頻率較高 (聲音較亮)； >>> 3 代表切斷頻率較低 (聲音較悶/柔和)
-            filtered_wave <= filtered_wave + ((next_wave - filtered_wave) >>> 3);
+            // 簡單的一階低通濾波器
+            filtered_wave <= filtered_wave + (filter_diff >>> 3);
         end
     end
 
@@ -135,7 +135,7 @@ module Audio_Player (
                             
                             // --- Channel 1 ---
                             if (rom_data[47:41] != 0) begin
-                                n1 <= rom_data[47:41]; 
+                                n1 <= rom_data[47:41];
                                 ch1_on <= 1'b1;        
                                 if (rom_data[47:41] != prev_n1) env1 <= {rom_data[40:36], 19'd0}; 
                             end else ch1_on <= 1'b0;        
