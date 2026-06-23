@@ -1,5 +1,0 @@
-PLL_Name	CLOCK_DIV:u_clk_div|altpll:altpll_component|CLOCK_DIV_altpll:auto_generated|pll1
-PLLJITTER	48
-PLLSPEmax	84
-PLLSPEmin	-53
-
