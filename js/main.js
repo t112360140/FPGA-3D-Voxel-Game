@@ -267,74 +267,65 @@ function genMapPerlin(seed) {
 
 function genMap(seed) {
     rand32_init(seed);
-    const offsetX = (rand32() % 10000);
-    const offsetZ = (rand32() % 10000);
+    const offsetX = (rand32() & 0xFFFF);
+    const offsetZ = (rand32() & 0xFFFF);
+
     for (let x = 0; x < WORLD_X; x++) {
         for (let z = 0; z < WORLD_Z; z++) {
-            // 這些數值控制「不規則感」
             const nx = x + offsetX;
             const nz = z + offsetZ;
 
-            // 疊加三層不同尺度的波
-            let noise1 = (multQ16(sin(nx<<3), cos(nz<<3))<<3);    // 1. 大丘陵 (低頻)
-            noise1 += (sin((nx<<5) + (nz<<4))<<1);                // 2. 中型起伏 (中頻) - 使用不規則的縮放值
-            noise1 += (multQ16(sin(nx<<6), cos(nz<<5))<<0);       // 3. 微小雜訊 (高頻) - 模擬地表不平整
+            let noise1 = (multQ16(sin(nx<<3), cos(nz<<3))<<3);
+            noise1 += (sin((nx<<5) + (nz<<4))<<1);
+            noise1 += (multQ16(sin(nx<<6), cos(nz<<5))<<0);
             noise1 = toInt(noise1);
 
-            let noise2 = (multQ16(sin(nx<<5), cos(nz<<5))<<1);
+            let noise2 = (multQ16(cos(nx<<5), cos(nz<<5))<<1);
             noise2 = toInt(noise2);
 
-            const stone = 50-noise1;
+            const stone = 50 - noise1;
             const grass = stone + 4 + noise2;
-            for (let y = 0; y < grass; y++) {
-                if(y<stone) setBlock(x, y+1, z, 1);
-                else if(y>=grass-1){
-                    setBlock(x, y, z, 2);
 
-                    if (y > 48) {
-                        // 1. 計算目前的 8x8 網格座標 (直接右移 3 位元)
-                        const cx = x >> 3;
-                        const cz = z >> 3;
-                        
-                        // 2. 取得這個網格專屬的 Hash 值
-                        const hashVal = (cx * 821) ^ (cz * 983) ^ seed;
-                        
-                        // 3. 從 Hash 中抽出這棵樹的「天選偏移座標」
-                        // 為了保證相鄰網格的樹也不會貼在一起，我們將偏移量限制在 2~5 之間 (置中)
-                        // (hashVal & 3) 會產生 0~3 的數字，加上 2 後變成 2~5
-                        const offsetX = (hashVal & 3) + 2;
-                        const offsetZ = ((hashVal >> 2) & 3) + 2;
-                        
-                        // 4. 判斷目前的 x, z 迴圈，是不是剛好走到這個「天選座標」
-                        // (x & 7) 是取 0~7 的餘數，等同於 x % 8
-                        const isChosenX = (x & 7) === offsetX;
-                        const isChosenZ = (z & 7) === offsetZ;
-                        
-                        if (isChosenX && isChosenZ) {
-                            // 5. 抽出機率值 (0~255)，決定這個網格到底要不要長樹
-                            const spawnChance = (hashVal >> 4) & 0xFF;
-                            
-                            // 假設 > 100 代表這個 8x8 網格有大約 60% 的機率會長樹
-                            if (spawnChance > 150) {
-                                placeTree(x, y, z);
-                            }
-                        }
-                    }
-                }
-                else setBlock(x, y, z, 3);
-            }
             setBlock(x, 0, z, 15);
-            if(grass<=48) setBlock(x, 48, z, 6);
+            for (let y = 1; y < WORLD_Y; y++) {
+                if (y < stone) setBlock(x, y, z, 1);
+                else if (y < grass) setBlock(x, y, z, 3);
+                else if (y === grass) setBlock(x, y, z, 2);
+                else setBlock(x, y, z, 0); // 空氣
+            }
+            if (grass < 49) setBlock(x, 49, z, 6);
         }
     }
 
-    player.x=toFixed(WORLD_X>>1)+toFixed(0.5);
-    player.z=toFixed(WORLD_Z>>1)+toFixed(0.5);
-    const player_x=toInt(player.x);
-    const player_z=toInt(player.z);
-    for(let y=WORLD_Y-3;y>0;y--){
-        if(getBlock(player_x, y, player_z)!=0){
-            player.y=toFixed(y+5);
+    for (let x = 0; x < WORLD_X / 8; x++) {
+        for (let z = 0; z < WORLD_Z / 8; z++) {
+            const hashVal = (x * 821) ^ (z * 983) ^ seed;
+            const tx = (x << 3) + ((hashVal & 3) + 2);
+            const tz = (z << 3) + (((hashVal >> 1) & 3) + 2);
+
+            const spawnChance = (hashVal >> 4) & 0xFF;
+            if (spawnChance > 150) {
+                let y;
+                for (y = WORLD_Y - 2; y >= 0; y--) {
+                    let block = getBlock(tx, y, tz);
+                    if (block !== 0) {
+                        if (block !== 2) y = 0;
+                        break;
+                    }
+                }
+                if (y > 0) placeTree(tx, y, tz);
+            }
+        }
+    }
+
+    player.x = toFixed(WORLD_X >> 1) + toFixed(0.5);
+    player.z = toFixed(WORLD_Z >> 1) + toFixed(0.5);
+    const player_x = toInt(player.x);
+    const player_z = toInt(player.z);
+    
+    for (let y = WORLD_Y - 3; y > 0; y--) {
+        if (getBlock(player_x, y, player_z) !== 0) {
+            player.y = toFixed(y + 5);
             break;
         }
     }
@@ -851,7 +842,8 @@ function waterSim(player){
 
 //----MAIN----
 // genMapPerlin(new Date().getTime());
-genMap(new Date().getTime());
+// genMap(new Date().getTime());
+genMap(0x21501);
 
 
 let keyPress={};
