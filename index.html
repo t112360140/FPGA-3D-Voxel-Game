@@ -196,6 +196,26 @@
                 }
                 }
             ">
+
+            <br><br><br>
+            <label>
+                Scale:
+                <input type="range" min="1" max="64" value="4" title="4" id="screenshot-scale" onchange="this.title=this.value">
+            </label>
+            <br>
+            <label>
+                Length:
+                <input type="range" min="5" max="256" value="24" title="24" id="screenshot-len" onchange="this.title=this.value">
+            </label>
+            <br>
+            <button onclick="
+            {
+                const scale=parseInt(document.getElementById('screenshot-scale').value);
+                const len=parseInt(document.getElementById('screenshot-len').value);
+                saveView(scale, len);
+            }
+            ">Save View</button>
+            <br>
         </div>
 
         <script src="./js/main.js"></script>

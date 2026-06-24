@@ -286,7 +286,29 @@ function abs(a){
     return a;
 }
 
+//----TOOLS----
 
+function downloadFile(name='file.txt', blob=new Blob(['WAH!'])){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=name;
+    a.click();
+    setTimeout(()=>{
+        URL.revokeObjectURL(a.href);
+    }, 5000);
+}
+
+function saveView(scale=4, max_length=MAX_LENGTH){
+    const canvas=document.createElement('canvas');
+    const temp_vga=new VGA(canvas, Math.floor(480/scale), Math.floor(640/scale), scale);
+    renderFrame(temp_vga, player, max_length);
+    
+    canvas.toBlob((blob)=>{
+        downloadFile('Screenshot.png', blob);
+    });
+}
+
+//----OTHER----
 
 const Minecraft_Font = [
     [ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 ], // [32] ' '

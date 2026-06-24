@@ -333,7 +333,8 @@ function genMap(seed) {
 
 
 //---渲染---
-function castRay(player_x, player_y, player_z, dirX, dirY, dirZ, throughBlock=false) {
+function castRay(player_x, player_y, player_z, dirX, dirY, dirZ, throughBlock=false, max_length=MAX_LENGTH) {
+    if(!max_length) max_length=MAX_LENGTH;
     
     // ==========================================
     // Phase 1: Setup 準備階段 (每條射線執行一次)
@@ -418,7 +419,7 @@ function castRay(player_x, player_y, player_z, dirX, dirY, dirZ, throughBlock=fa
     
     let hit = 0;      // 撞到的方塊類型 (0 代表空氣)
     let hitSide = 0;  // 撞到哪一面 (0=X面, 1=Y面, 2=Z面) 用來做基礎光影
-    let MAX_STEPS = MAX_LENGTH; // 視距：最多往前找 24 個方塊，避免無窮迴圈
+    let MAX_STEPS = max_length; // 視距：最多往前找 24 個方塊，避免無窮迴圈
     
     // 這就是未來在 FPGA 裡面的 always @(posedge clk) 區塊！
     while (hit === 0 && MAX_STEPS > 0) {
@@ -472,7 +473,7 @@ function castRay(player_x, player_y, player_z, dirX, dirY, dirZ, throughBlock=fa
     };
 }
 
-function renderFrame(vga, player) {
+function renderFrame(vga, player, max_length=MAX_LENGTH) {
     // let radianYaw = angleToRadian((player.yaw+512)%1024);
     // let radianPitch = angleToRadian((player.pitch+512)%1024);
 
@@ -551,7 +552,7 @@ x*2*FOV*rightX/height-width*FOV*rightX/height
 */
 
 
-            let hitResult = castRay(px, py, pz, dirX, dirY, dirZ , player.viewUnderwater);
+            let hitResult = castRay(px, py, pz, dirX, dirY, dirZ , player.viewUnderwater, max_length);
 
             let pixelColor = 0;
             if (hitResult.blockType !== 0) {
@@ -841,9 +842,12 @@ function waterSim(player){
 }
 
 //----MAIN----
+
+let seed=parseInt(location.hash.slice(1), 16);
+if(!isFinite(seed)) seed=null;
+
 // genMapPerlin(new Date().getTime());
-// genMap(new Date().getTime());
-genMap(0x21501);
+genMap((seed===null)?new Date().getTime():seed);
 
 
 let keyPress={};
