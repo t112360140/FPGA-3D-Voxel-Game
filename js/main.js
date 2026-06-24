@@ -280,7 +280,7 @@ function genMap(seed) {
             noise1 += (multQ16(sin(nx<<6), cos(nz<<5))<<0);
             noise1 = toInt(noise1);
 
-            let noise2 = (multQ16(cos(nx<<5), cos(nz<<5))<<1);
+            let noise2 = (multQ16(sin(nx<<5), cos(nz<<5))<<1);
             noise2 = toInt(noise2);
 
             const stone = 50 - noise1;
