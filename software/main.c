@@ -507,7 +507,7 @@ int16_t noise_1(int16_t nx, int16_t nz) {
     return RSSHIFT(noise, FRAC_BITS);
 }
 int16_t noise_2(int16_t nx, int16_t nz) {
-    return RSSHIFT(LSSHIFT(multQ16(cos_t(LSHIFT(nx, 5)), cos_t(LSHIFT(nz, 5))), 1), FRAC_BITS);
+    return RSSHIFT(LSSHIFT(multQ16(sin_t(LSHIFT(nx, 5)), cos_t(LSHIFT(nz, 5))), 1), FRAC_BITS);
 }
 
 void genMap(uint32_t seed) {
